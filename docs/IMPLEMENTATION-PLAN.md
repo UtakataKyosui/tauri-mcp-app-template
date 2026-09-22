@@ -1,19 +1,28 @@
 # 実装計画: Claude Code / Codex 協働のための GUI 看板
 
-Tauri 製の GUI 看板を、Claude Code Mod (`example-mcp-mod-plugin/`) 経由で
-Claude Code と Codex の両方から操作する。看板のカードがタスクの唯一の記録で
+Tauri 製の GUI 看板を、Claude Code は Mod (`example-mcp-mod-plugin/`) 経由、
+Codex などは MCP 経由で操作する。看板のカードがタスクの唯一の記録で
 あり、誰がどのモデルを何 effort で担当するかを決める。
 
 ## 全体の形
 
 ```
-Claude Code ── kanban Mod ──┐
-                            ├── Unix socket / HTTP ──> Tauri 看板 (Rust)
-Codex ─────── 看板が起動 ───┘                            ├─ 状態の所有者
-                                                          ├─ OTLP 受信
-                                                          └─ 単価表と集計
-Claude Code のネイティブ OTel ── OTLP/http-json ─────────┘
+Claude Code ── kanban Mod ── Unix socket / HTTP ──┐
+                                                  ├── Tauri 看板 (Rust)
+Codex / 他の MCP クライアント ── Streamable HTTP /mcp ┘    ├─ 状態の所有者
+                                                       ├─ OTLP 受信（後続 Phase）
+                                                       └─ 単価表と集計（後続 Phase）
 ```
+
+Claude Code は既存 Mod のフック・ツールから看板へ接続する。Codex などの MCP
+クライアントは Tauri 内の MCP サーバーへ接続する。両入口は同じ Rust の状態を
+使い、Mod のキャッシュ以外に独立した看板状態を作らない。MCP の URL は
+`http://127.0.0.1:8765/mcp`、Mod の Unix socket は
+`$HOME/.local/share/sample-tauri-app/board.sock` とする。
+
+Tauri の公式 HTTP plugin はクライアント、localhost plugin は画面資産の配信向け。
+MCP サーバーには Rust の `rmcp` と Axum を Tauri プロセス内で起動する。
+
 
 状態の所有者は Rust プロセス 1 本にする。Mod は読み書きするだけで、キャッシュ
 以外の状態を持たない。
@@ -57,13 +66,16 @@ Claude Code のネイティブ OTel ── OTLP/http-json ───────�
 | POST | `/telemetry` | `TurnRecord`（カード未帰属） |
 | POST | `/correlations` | `Correlation` |
 
-型は `example-mcp-mod-plugin/hooks/board/types.ts` が定義元。Rust 側の
-構造体はこれと一対一にし、`serde` の `rename_all = "camelCase"` を使う。
+型の定義元は `src-tauri/src/board.rs`。`serde` と Specta から TypeScript を
+生成し、GUI と Mod が参照する。詳細は `DATA-MODEL-PLAN.md`。
 
 カードやポリシーを編集したら、socket と同じディレクトリの `board.revision`
 を touch する。Mod が engine のファイル監視でこれを受け、キャッシュを捨てる。
 
 ## Phase 2: Codex の実行監督 (#2)
+
+Codex 自身の看板操作は MCP を使う。Mod の `dispatch` から Codex を自動起動する
+機能は、この実行監督ができるまで利用可能としない。
 
 `POST /cards/:id/runs` を受けたら、看板が Codex を起動して完了まで面倒を見る。
 Mod が持たないのは、`$.process.run` が最長 10 分で reject されるため。
