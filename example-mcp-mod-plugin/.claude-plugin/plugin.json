@@ -1,0 +1,25 @@
+{
+  "name": "kanban",
+  "version": "0.1.0",
+  "description": "Tauri 看板と Claude Code / Codex を繋ぐ Mod。看板のカードを唯一の真実として、モデル振り分け・進捗記録・プロンプト構造化を行う。",
+  "userConfig": {
+    "socketPath": {
+      "type": "string",
+      "title": "看板ソケット",
+      "description": "看板アプリが listen する Unix socket のパス。空なら $CLAUDE_KANBAN_SOCK、次に既定パスを使う。",
+      "default": ""
+    },
+    "codexCommand": {
+      "type": "string",
+      "title": "Codex コマンド",
+      "description": "看板へ登録する run が使う Codex CLI の実行ファイル名。",
+      "default": "codex"
+    },
+    "structurePrompts": {
+      "type": "boolean",
+      "title": "プロンプトを構造化する",
+      "description": "プロンプト送信時に、現在フォーカス中のカードを指す注記を先頭へ付ける。",
+      "default": true
+    }
+  }
+}
