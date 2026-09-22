@@ -26,6 +26,11 @@ specta = { version = "2.0.0-rc.20", features = ["derive"] }
 specta-typescript = "0.0.7"
 tauri-specta = { version = "2.0.0-rc.20", features = ["derive", "typescript"] }
 tauri-plugin-store = "2.4.5"
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+rmcp = { version = "3.4", default-features = false, features = ["server", "transport-streamable-http-server", "macros", "schemars"] }
+time = { version = "0.3", features = ["formatting"] }
+schemars = "1"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

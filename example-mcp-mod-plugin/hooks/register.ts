@@ -142,8 +142,8 @@ async function focusedCard(
 ): Promise<{ card: Card | undefined; policy: Policy | undefined }> {
   try {
     const board = await withDeadline($, signal, fetchBoard($, socket));
-    const card = focusOf(board.cards, board.focus);
-    return { card, policy: policyFor(board.policies, card) };
+    const card = focusOf(board.cards, board.focus ?? undefined);
+    return { card, policy: policyFor(board.policies ?? undefined, card) };
   } catch {
     return { card: undefined, policy: undefined };
   }
