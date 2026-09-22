@@ -25,3 +25,8 @@ dist-ssr
 
 # Generated files
 ./src/bindings.ts
+
+# Local credentials
+.env
+.env.*
+!.env.example

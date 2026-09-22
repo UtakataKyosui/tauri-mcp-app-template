@@ -1,11 +1,18 @@
 {
   "mcpServers": {
     "shadcn": {
-      "command": "npx",
+      "command": "pnpx",
       "args": [
         "shadcn@latest",
         "mcp"
       ]
-    }
+    },
+    "stitch": {
+      "url": "https://stitch.googleapis.com/mcp",
+      "type": "http",
+      "headers": {
+        "X-Goog-Api-Key": "${STITCH_API_KEY}"
+      }
+    },
   }
 }
