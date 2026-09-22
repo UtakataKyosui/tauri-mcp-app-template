@@ -22,7 +22,7 @@ export type Effort = string | number
 
 export type PatchBoard = { focus?: string | null; policies?: { [key in string]: Policy } | null }
 
-export type PatchCard = { title?: string | null; objective?: string | null; requirements?: string[] | null; status?: Status | null; phase?: string | null; assignment?: Assignment | null; summary?: string | null }
+export type PatchCard = { title?: string; objective?: string; requirements?: string[]; status?: Status; phase?: string | null; assignment?: Assignment; summary?: string }
 
 export type Policy = { skills?: AccessRule | null; agents?: AccessRule | null }
 

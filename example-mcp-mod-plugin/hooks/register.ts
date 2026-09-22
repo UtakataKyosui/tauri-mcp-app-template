@@ -35,6 +35,16 @@ import {
 
 type Engine = EngineInterface;
 
+class BoardRequestError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
+
+function isPermanentFailure(error: unknown): boolean {
+  return error instanceof BoardRequestError && error.status >= 400 && error.status < 500;
+}
+
 /**
  * 看板アプリの Unix socket。設定 → 環境変数 → 既定パスの順に決まる。
  * セッションごとに一度だけ解決すればよいが、module reload で捨てられる。
@@ -61,7 +71,7 @@ async function request(
     body: body === undefined ? undefined : JSON.stringify(body),
     socketPath: socket,
   });
-  if (!res.ok) throw new Error(`board ${method} ${path}: ${res.status}`);
+  if (!res.ok) throw new BoardRequestError(res.status, `board ${method} ${path}: ${res.status}`);
   return res.text ? (JSON.parse(res.text) as unknown) : undefined;
 }
 
@@ -70,7 +80,10 @@ async function readOutbox($: Engine): Promise<PendingOp[]> {
   return Array.isArray(raw) ? (raw as PendingOp[]) : [];
 }
 
-/** 溜まった書き込みを投入順に流す。1件でも失敗したらそこで止め、残りは保持する。 */
+/**
+ * 溜まった書き込みを投入順に流す。4xx は現在の操作で直せないため捨て、通信や
+ * サーバー側の一時障害だけで停止して残りを保持する。
+ */
 async function flush($: Engine, socket: string): Promise<number> {
   const queued = await readOutbox($);
   if (queued.length === 0) return 0;
@@ -79,7 +92,11 @@ async function flush($: Engine, socket: string): Promise<number> {
     try {
       await request($, socket, pending.method, pending.path, pending.body);
       sent += 1;
-    } catch {
+    } catch (error) {
+      if (isPermanentFailure(error)) {
+        sent += 1;
+        continue;
+      }
       break;
     }
   }
@@ -96,7 +113,8 @@ async function write($: Engine, socket: string, pending: PendingOp): Promise<boo
     await flush($, socket);
     await request($, socket, pending.method, pending.path, pending.body);
     return true;
-  } catch {
+  } catch (error) {
+    if (isPermanentFailure(error)) return false;
     const queued = await readOutbox($);
     queued.push(pending);
     await $.store.set(OUTBOX_KEY, queued.slice(-OUTBOX_LIMIT));
@@ -311,22 +329,8 @@ export const register: Register = (on: On, options: PluginOptions) => {
     const text = prompt ?? promptFor(card);
 
     if (runtime === "codex") {
-      const codex = typeof options.codexCommand === "string" ? options.codexCommand : "codex";
-      const delivered = await write(
-        $,
-        socket,
-        op(await $.clock.now(), "POST", `${cardPath(id)}/runs`, {
-          runtime: "codex",
-          command: codex,
-          model,
-          effort,
-          prompt: text,
-        }),
-      );
       return {
-        result: delivered
-          ? `${id} を codex (${codex} --model ${model}, effort ${effort}) の run として看板へ登録しました。完了は看板が書き戻します。`
-          : `看板アプリが応答しないため run を保留しました (${id})。`,
+        result: `${id} は codex (${model}, effort ${effort}) に割り当てられています。実行監督は未実装のため、Codex は MCP 経由でこのカードを操作してください。`,
       };
     }
 

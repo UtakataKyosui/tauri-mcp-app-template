@@ -116,24 +116,32 @@ pub struct PatchCard {
         skip_serializing_if = "Option::is_none",
         deserialize_with = "non_null"
     )]
+    #[specta(type = String)]
+    #[schemars(with = "String")]
     pub title: Option<String>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "non_null"
     )]
+    #[specta(type = String)]
+    #[schemars(with = "String")]
     pub objective: Option<String>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "non_null"
     )]
+    #[specta(type = Vec<String>)]
+    #[schemars(with = "Vec<String>")]
     pub requirements: Option<Vec<String>>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "non_null"
     )]
+    #[specta(type = Status)]
+    #[schemars(with = "Status")]
     pub status: Option<Status>,
     #[serde(
         default,
@@ -146,12 +154,16 @@ pub struct PatchCard {
         skip_serializing_if = "Option::is_none",
         deserialize_with = "non_null"
     )]
+    #[specta(type = Assignment)]
+    #[schemars(with = "Assignment")]
     pub assignment: Option<Assignment>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "non_null"
     )]
+    #[specta(type = String)]
+    #[schemars(with = "String")]
     pub summary: Option<String>,
 }
 
@@ -366,14 +378,7 @@ impl BoardStore {
             .ok_or(StoreError::NotFound)
     }
     pub fn create(&self, input: CreateCard) -> Result<Card, StoreError> {
-        if input.id.trim().is_empty()
-            || input.title.trim().is_empty()
-            || input.assignment.model.trim().is_empty()
-        {
-            return Err(StoreError::Invalid(
-                "id, title and model must be nonempty".into(),
-            ));
-        }
+        validate_id(&input.id)?;
         let card = Card {
             id: input.id,
             title: input.title,
@@ -386,6 +391,7 @@ impl BoardStore {
             entries: Vec::new(),
             updated_at: now(),
         };
+        validate_card(&card)?;
         self.change(|state| {
             if state
                 .board
@@ -428,6 +434,7 @@ impl BoardStore {
             if let Some(value) = input.summary {
                 card.summary = value;
             }
+            validate_card(card)?;
             card.updated_at = now();
             Ok(card.clone())
         })
@@ -522,6 +529,33 @@ impl BoardStore {
     }
 }
 
+fn validate_id(id: &str) -> Result<(), StoreError> {
+    if id.trim().is_empty() {
+        return Err(StoreError::Invalid("id must be nonempty".into()));
+    }
+    Ok(())
+}
+
+fn validate_card(card: &Card) -> Result<(), StoreError> {
+    if card.title.trim().is_empty() {
+        return Err(StoreError::Invalid("title must be nonempty".into()));
+    }
+    if card.assignment.model.trim().is_empty() {
+        return Err(StoreError::Invalid(
+            "assignment.model must be nonempty".into(),
+        ));
+    }
+    match &card.assignment.effort {
+        Effort::Named(value) if value.trim().is_empty() => Err(StoreError::Invalid(
+            "assignment.effort must be nonempty".into(),
+        )),
+        Effort::Budget(0) => Err(StoreError::Invalid(
+            "assignment.effort budget must be positive".into(),
+        )),
+        _ => Ok(()),
+    }
+}
+
 fn now() -> String {
     time::OffsetDateTime::now_utc()
         .format(&time::format_description::well_known::Rfc3339)
@@ -539,6 +573,59 @@ mod tests {
         let clear: PatchCard = serde_json::from_str(r#"{"phase":null}"#).unwrap();
         assert!(matches!(clear.phase, Some(None)));
         assert!(serde_json::from_str::<PatchCard>(r#"{"title":null}"#).is_err());
+
+        let schema = serde_json::to_value(schemars::schema_for!(PatchCard)).unwrap();
+        assert_eq!(
+            schema.pointer("/properties/title/type"),
+            Some(&serde_json::json!("string"))
+        );
+    }
+
+    #[test]
+    fn patch_rejects_invalid_card_fields() {
+        let path = std::env::temp_dir().join(format!("kanban-patch-{}.json", std::process::id()));
+        let store = BoardStore::open(path).unwrap();
+        store
+            .create(CreateCard {
+                id: "one".into(),
+                title: "One".into(),
+                objective: String::new(),
+                requirements: vec![],
+                status: Status::Ready,
+                phase: None,
+                assignment: Assignment {
+                    runtime: Runtime::Claude,
+                    model: "test".into(),
+                    effort: Effort::Named("low".into()),
+                    role: None,
+                },
+                summary: String::new(),
+            })
+            .unwrap();
+        assert!(store
+            .patch(
+                "one",
+                PatchCard {
+                    title: Some(String::new()),
+                    ..PatchCard::default()
+                }
+            )
+            .is_err());
+        assert!(store
+            .patch(
+                "one",
+                PatchCard {
+                    assignment: Some(Assignment {
+                        runtime: Runtime::Claude,
+                        model: String::new(),
+                        effort: Effort::Named("low".into()),
+                        role: None
+                    }),
+                    ..PatchCard::default()
+                }
+            )
+            .is_err());
+        assert_eq!(store.card("one").unwrap().title, "One");
     }
 
     #[test]

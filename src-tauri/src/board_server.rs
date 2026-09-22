@@ -295,7 +295,7 @@ pub async fn start(store: BoardStore, socket: PathBuf, mcp_address: SocketAddr) 
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::{
